@@ -118,7 +118,7 @@ impl Game {
     pub fn new_game_object(&mut self, x: f64, y: f64) -> usize {
         let object = gameobject::GameObject::new((x, y));
         self.objects.push(object);
-        self.objects.len()
+        self.objects.len() - 1
     }
 
     pub fn get_game_object(&self, index: usize) -> Option<&gameobject::GameObject> {
