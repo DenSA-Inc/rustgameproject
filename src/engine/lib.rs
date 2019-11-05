@@ -13,6 +13,7 @@ use piston_window::PistonWindow as Window;
 use piston_window::*;
 use sprite::*;
 pub use uuid::Uuid;
+use std::pin::Pin;
 
 use std::rc::Rc;
 
@@ -22,7 +23,7 @@ pub struct Game {
     pub gl: GlGraphics, // OpenGL drawing backend.
     sprites: Vec<(Uuid, Scene<Texture<gfx_device_gl::Resources>>)>, // Sprites in world
     main_window: Window, // The main game window
-    objects: Vec<gameobject::GameObject>,
+    objects: Vec<Pin<Box<gameobject::GameObject>>>,
 }
 
 impl Game {
@@ -45,7 +46,7 @@ impl Game {
 
         let sprites: Vec<(Uuid, Scene<Texture<gfx_device_gl::Resources>>)> = Vec::new();
 
-        let objects: Vec<gameobject::GameObject> = Vec::new();
+        let objects = Vec::new();
 
         Game {
             gl,
@@ -118,14 +119,14 @@ impl Game {
     pub fn new_game_object(&mut self, x: f64, y: f64) -> usize {
         let object = gameobject::GameObject::new((x, y));
         self.objects.push(object);
-        self.objects.len()
+        self.objects.len() - 1
     }
 
-    pub fn get_game_object(&self, index: usize) -> Option<&gameobject::GameObject> {
+    pub fn get_game_object(&self, index: usize) -> Option<&Pin<Box<gameobject::GameObject>>> {
         self.objects.get(index)
     }
 
-    pub fn get_game_object_mut(&mut self, index: usize) -> Option<&mut gameobject::GameObject> {
+    pub fn get_game_object_mut(&mut self, index: usize) -> Option<&mut Pin<Box<gameobject::GameObject>>> {
         self.objects.get_mut(index)
     }
 }

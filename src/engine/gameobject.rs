@@ -13,6 +13,8 @@ use piston_window::*;
 use sprite::*;
 use std::rc::Rc;
 pub use uuid::Uuid;
+use std::ptr::NonNull;
+use std::pin::Pin;
 
 pub struct TransformComponent {
     x: f64,
@@ -24,10 +26,14 @@ pub struct TransformComponent {
 struct SpriteComponent {
     scene: sprite::Scene<piston_window::Texture<gfx_device_gl::Resources>>,
     window: Window,
-    parent_transform: &TransformComponent,
+    parent_transform: NonNull<TransformComponent>,
 }
 
 impl SpriteComponent {
+    fn transform(&self) -> &TransformComponent {
+        unsafe { self.parent_transform.as_ref() }
+    }
+
     fn render(&mut self, window: &mut Window, event: &piston_window::Event) {
         window.draw_2d(event, |context, gfx, _| {
             self.scene.event(event);
@@ -37,9 +43,13 @@ impl SpriteComponent {
 
     fn update(&mut self, args: &RenderArgs) {
         if let Some(sprite) = self.scene.children().first() {
-            sprite.set_position(self.parent_transform.x, self.parent_transform.y);
-            sprite.set_rotation(self.parent_transform.rotation);
-            sprite.set_scale(self.parent_transform.size, self.parent_transform.size);
+            let sprite = self.scene.child_mut(sprite.id()).unwrap();
+
+            sprite.set_position(unsafe { self.parent_transform.as_ref().x }, unsafe { self.parent_transform.as_ref().x });
+            sprite.set_rotation(unsafe { self.parent_transform.as_ref().rotation });
+
+            let size = unsafe { self.parent_transform.as_ref().size };
+            sprite.set_scale(size, size);
         }
     }
 }
@@ -50,8 +60,8 @@ pub struct GameObject {
 }
 
 impl GameObject {
-    pub fn new((x, y): (f64, f64)) -> GameObject {
-        GameObject {
+    pub fn new((x, y): (f64, f64)) -> Pin<Box<GameObject>> {
+        Box::pin(GameObject {
             transform: TransformComponent {
                 x,
                 y,
@@ -59,23 +69,26 @@ impl GameObject {
                 rotation: 0.0,
             },
             sprite: None,
-        }
+        })
     }
 
-    pub fn add_sprite(&mut self, file_name: &str, window: Window) {
+    pub fn add_sprite(pin: &mut Pin<Box<Self>>, file_name: &str, window: Window) {
         let texture_settings = TextureSettings::new()
             .filter(Filter::Nearest)
             .mipmap(Filter::Nearest);
 
-        self.sprite = Option::from(SpriteComponent {
+        let mut factory = window.factory.clone();
+        let encoder = factory.create_command_buffer().into();
+
+        pin.sprite = Option::from(SpriteComponent {
             scene: Scene::new(),
             window,
-            parent_transform: self.get_transform(),
+            parent_transform: NonNull::from(&pin.transform)
         });
 
         let mut texture_context = TextureContext {
-            factory: window.factory.clone(),
-            encoder: window.factory.create_command_buffer().into(),
+            factory: factory,
+            encoder: encoder,
         };
 
         let texture = Rc::new(
@@ -91,12 +104,8 @@ impl GameObject {
             .unwrap(),
         );
 
-        let mut sprite = Sprite::from_texture(texture);
+        let sprite = Sprite::from_texture(texture);
 
-        self.sprite.unwrap().scene.add_child(sprite);
-    }
-
-    pub fn get_transform(&self) -> &TransformComponent {
-        &self.transform
+        pin.sprite.as_mut().unwrap().scene.add_child(sprite);
     }
 }
