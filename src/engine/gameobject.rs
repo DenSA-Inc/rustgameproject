@@ -15,6 +15,7 @@ use std::rc::Rc;
 pub use uuid::Uuid;
 use std::ptr::NonNull;
 use std::pin::Pin;
+use std::marker::PhantomPinned;
 
 pub struct TransformComponent {
     x: f64,
@@ -27,6 +28,7 @@ struct SpriteComponent {
     scene: sprite::Scene<piston_window::Texture<gfx_device_gl::Resources>>,
     window: Window,
     parent_transform: NonNull<TransformComponent>,
+    _pin: PhantomPinned,
 }
 
 impl SpriteComponent {
@@ -80,11 +82,16 @@ impl GameObject {
         let mut factory = window.factory.clone();
         let encoder = factory.create_command_buffer().into();
 
-        pin.sprite = Option::from(SpriteComponent {
-            scene: Scene::new(),
-            window,
-            parent_transform: NonNull::from(&pin.transform)
-        });
+        let transform = NonNull::from(&pin.transform);
+        unsafe {
+            let mut_ref = Pin::as_mut(pin);
+            Pin::get_unchecked_mut(mut_ref).sprite = Option::from(SpriteComponent {
+                scene: Scene::new(),
+                window,
+                parent_transform: transform,
+                _pin: PhantomPinned,
+            });
+        }
 
         let mut texture_context = TextureContext {
             factory: factory,
@@ -106,6 +113,8 @@ impl GameObject {
 
         let sprite = Sprite::from_texture(texture);
 
-        pin.sprite.as_mut().unwrap().scene.add_child(sprite);
+        let mut_ref = pin.as_mut();
+        let spr = unsafe { &mut Pin::get_unchecked_mut(mut_ref).sprite };
+        spr.as_mut().unwrap().scene.add_child(sprite);
     }
 }
